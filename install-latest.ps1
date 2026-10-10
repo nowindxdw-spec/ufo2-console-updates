@@ -37,12 +37,44 @@ function LocalVersion {
     return ("$v" -replace "\+.*$", "")
 }
 
-# 1) 清单
+# 1) 清单：优先 curl（raw.githubusercontent.com 常常连上就卡住，PowerShell 自带的
+#    HttpClient 更容易超时），并且依次降级 raw -> api.github.com -> jsDelivr。
 if (-not $ManifestUrl -and $BaseUrl) { $ManifestUrl = ($BaseUrl.TrimEnd('/') + "/api/update/manifest") }
-if (-not $ManifestUrl) { $ManifestUrl = "https://raw.githubusercontent.com/$Repo/main/latest.json" }
-Say "读清单 $ManifestUrl"
-try { $manifest = Invoke-RestMethod -Uri $ManifestUrl -UseBasicParsing -Headers $headers } catch { Die "读不到清单：$($_.Exception.Message)" }
-if (-not $manifest.version) { Die "清单里没有 version 字段" }
+if ($ManifestUrl) { $manifestUrls = @($ManifestUrl) }
+else {
+    $manifestUrls = @(
+        "https://raw.githubusercontent.com/$Repo/main/latest.json",
+        "https://api.github.com/repos/$Repo/contents/latest.json?ref=main",
+        "https://cdn.jsdelivr.net/gh/$Repo@main/latest.json"
+    )
+}
+$manifest = $null
+$tmpJson = Join-Path $env:TEMP "ufo2-latest-$PID.json"
+foreach ($u in $manifestUrls) {
+    Say "读清单 $u"
+    Remove-Item -LiteralPath $tmpJson -Force -ErrorAction SilentlyContinue
+    $argList = @('-sSL', '--fail', '--retry', '2', '--retry-delay', '2', '--max-time', '30', '--speed-limit', '1024', '--speed-time', '15')
+    if ($ApiKey) { $argList += @('-H', "X-API-Key: $ApiKey") }
+    if ($u -like 'https://api.github.com/*') { $argList += @('-H', 'Accept: application/vnd.github.raw+json') }
+    $argList += @('-o', $tmpJson, $u)
+    & curl.exe @argList 2>$null
+    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $tmpJson)) {
+        try { $manifest = Get-Content -LiteralPath $tmpJson -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $manifest = $null }
+    }
+    if ($manifest -and $manifest.version) { break }
+    $manifest = $null
+}
+Remove-Item -LiteralPath $tmpJson -Force -ErrorAction SilentlyContinue
+if (-not $manifest) {
+    # 机器上没有 curl（或全部地址都被挡）时，退回 PowerShell 自带的方式再试一遍
+    foreach ($u in $manifestUrls) {
+        try {
+            $manifest = Invoke-RestMethod -Uri $u -UseBasicParsing -Headers $headers -TimeoutSec 25
+            if ($manifest -and $manifest.version) { Say "清单改由 Invoke-RestMethod 读到：$u"; break }
+        } catch { $manifest = $null }
+    }
+}
+if (-not $manifest -or -not $manifest.version) { Die "读不到清单（试过 $($manifestUrls.Count) 个地址）。内网机器请加 -BaseUrl http://同伴机:8712 -ApiKey <密钥>" }
 if (-not $Tag) { $Tag = $manifest.tag }
 # 手填 tag 时以 tag 里的版本号为准（内网镜像可以代理任意历史版本）
 $wantVersion = $manifest.version
@@ -68,8 +100,9 @@ if (-not $url) { $url = "https://github.com/$Repo/releases/download/$Tag/$([uri]
 $keyArgs = @()
 if ($ApiKey) { $keyArgs = @("-H", "X-API-Key: $ApiKey") }
 Say "下载到 $file"
-& curl.exe -sSL --fail --retry 3 --retry-delay 3 @keyArgs -o "$file" "$url"
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $file)) { Die "下载失败（curl exit=$LASTEXITCODE）" }
+# 四十多兆的包经常中途被 reset：--continue-at - 断点续传，速度掉到 20KB/s 以下 30 秒就重连
+& curl.exe -sSL --fail --retry 5 --retry-delay 3 --continue-at - --speed-limit 20480 --speed-time 30 @keyArgs -o "$file" "$url"
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $file)) { Die "下载失败（curl exit=$LASTEXITCODE）。网络对大包不稳时：改用 -BaseUrl 走内网镜像，或把安装包手工放到 $file 再跑一次" }
 
 # 5) 校验 SHA-256（清单里给的是小写十六进制）
 $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLower()
