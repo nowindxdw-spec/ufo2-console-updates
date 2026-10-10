@@ -1,0 +1,27 @@
+{
+    "product":  "UFO2 Console",
+    "version":  "1.0.1",
+    "tag":  "v1.0.1",
+    "tier":  "slim",
+    "channel":  "stable",
+    "publishedAt":  "2026-10-10T06:07:38Z",
+    "releaseUrl":  "https://github.com/nowindxdw-spec/ufo2-console-updates/releases/tag/v1.0.1",
+    "apiLatest":  "https://api.github.com/repos/nowindxdw-spec/ufo2-console-updates/releases/latest",
+    "windows":  {
+                    "arch":  "x64",
+                    "minBuild":  "1809",
+                    "note":  "需要真实桌面会话（UIA 与截图）；远程桌面/无控制台会话不适合"
+                },
+    "silentInstall":  "UFO2-Console-1.0.1-slim-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART",
+    "installScript":  "https://raw.githubusercontent.com/nowindxdw-spec/ufo2-console-updates/main/install-latest.ps1",
+    "assets":  [
+                   {
+                       "name":  "UFO2-Console-1.0.1-slim-setup.exe",
+                       "size":  49560748,
+                       "sha256":  "ba3223ef87d80893779bc88c7729e398c6122f82de2347f61cc74190e018d229",
+                       "downloadUrl":  "https://github.com/nowindxdw-spec/ufo2-console-updates/releases/download/v1.0.1/UFO2-Console-1.0.1-slim-setup.exe",
+                       "sha256Url":  "https://github.com/nowindxdw-spec/ufo2-console-updates/releases/download/v1.0.1/UFO2-Console-1.0.1-slim-setup.exe.sha256"
+                   }
+               ],
+    "notes":  "## v1.0.1（2026-10-10） \n### 新增\n- AI 操作屏幕提示层（红色蒙版 + 横幅 + ESC 急停）\n- UFO2 Console - GUI, RESTful API, fixed HTML reports, PyInstaller packaging\n\n### 修复\n- Invoke-GitHub 调用点传 [ordered]@{} 在 argument 模式下不生效，body 退化成字符串导致 GitHub 报 Body should be a JSON object；改为普通 @{} （表达式模式里的 [ordered] 保留，那些是给 ConvertTo-Json 排字段用的）\n- publish.ps1 的 GitHub 调用改走 curl 直传（PS5.1 带中文 JSON body 被判 400）；curl stderr 临时降级；__error 改字符串\n- publish.ps1 里 $repo 与参数 $Repo 同名（PowerShell 变量大小写不敏感）导致仓库探测覆盖参数，仓库不存在时不再自动创建；改名 $repoInfo\n- ufo2-console.iss 里用 # 写普通注释被 ISPP 当成预处理指令（Unknown preprocessor directive），改回分号；顺带验证 #error 版本门禁可用\n- build.ps1 版本号校验写成 -not match（PS 语法不合法），改为 -notmatch\n- 重建 packaging/publish.ps1（换行被写成字面量，整脚本变成一行注释）\n- ESC 急停失效（钩子回调重进 Tcl 打死提示层）+ 任务列表加取消/停止按钮\n- +feat: 修掉真实模型的 IndexError，配置页改成「模型连接 + 角色下拉引用」\n- runtime 改用实体镜像，修掉安装后 WinError 448 无法启动任务\n\n### 其他\n- release: v1.0.1 + 版本与下载通道（对齐 daweiAgent 的发行管理）\n- docs: 新增内网 API 调用实操手册 docs/INTRANET-API.md\n- chore: UFO2 upstream baseline (microsoft/UFO2 main, tarball 2026-09-29)\n"
+}
